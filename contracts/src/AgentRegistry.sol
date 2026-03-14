@@ -1,27 +1,35 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.24;
 
 /**
  * @title AgentRegistry
- * @dev Implementation of EIP-8004: AI Agent Profile Standard
- * This allows agents to register their identity, model details, and capabilities on-chain.
+ * @notice Implementation of EIP-8004: AI Agent Profile Standard
+ * @dev Optimized for storage and gas using custom errors.
  */
 contract AgentRegistry {
-    
+    // --- Custom Errors ---
+    error NotOwner();
+
+    // --- Structs ---
     struct AgentProfile {
-        string name;
-        string model;
-        string description;
-        string metadataUri; // IPFS/Arweave link to extended JSON (traits, tools, etc)
-        address owner;
-        uint256 registeredAt;
-        uint256 gamesPlayed;
-        bool active;
+        address owner;        // 160 bits (Slot 1)
+        uint64 registeredAt;  // 64 bits
+        bool active;          // 8 bits
+        // 24 bits remaining in Slot 1
+        
+        uint256 gamesPlayed;  // 256 bits (Slot 2)
+        
+        string name;          // Dynamic
+        string model;         // Dynamic
+        string description;   // Dynamic
+        string metadataUri;   // Dynamic
     }
 
+    // --- State Variables ---
     mapping(address => AgentProfile) public agents;
     address[] public allAgents;
 
+    // --- Events ---
     event AgentRegistered(address indexed agentAddress, string name, string model);
     event AgentUpdated(address indexed agentAddress, string name);
     event AgentDeactivated(address indexed agentAddress);
@@ -40,47 +48,66 @@ contract AgentRegistry {
         string calldata _description,
         string calldata _metadataUri
     ) external {
-        bool isNew = (agents[msg.sender].owner == address(0));
+        AgentProfile storage profile = agents[msg.sender];
+        bool isNew = (profile.owner == address(0));
         
-        uint256 existingGames = isNew ? 0 : agents[msg.sender].gamesPlayed;
-        uint256 regAt = isNew ? block.timestamp : agents[msg.sender].registeredAt;
-
-        agents[msg.sender] = AgentProfile({
-            name: _name,
-            model: _model,
-            description: _description,
-            metadataUri: _metadataUri,
-            owner: msg.sender,
-            registeredAt: regAt,
-            gamesPlayed: existingGames,
-            active: true
-        });
-
         if (isNew) {
+            // New Registration
+            profile.owner = msg.sender;
+            profile.registeredAt = uint64(block.timestamp);
+            profile.active = true;
+            
             allAgents.push(msg.sender);
             emit AgentRegistered(msg.sender, _name, _model);
         } else {
+            // Update Existing Profile
             emit AgentUpdated(msg.sender, _name);
         }
+
+        profile.name = _name;
+        profile.model = _model;
+        profile.description = _description;
+        profile.metadataUri = _metadataUri;
+        // active state and gamesPlayed remain unchanged for updates
     }
 
+    /**
+     * @notice Increment the games played counter for an agent
+     * @dev Simple increment for now. Should be permissioned to ArenaPlatform in production context.
+     * @param _agent Address of the agent
+     */
     function incrementGames(address _agent) external {
-        // In a production environment, only a authorized platform contract could call this
-        // For the hackathon, we can add a check for the ArenaPlatform contract
-        agents[_agent].gamesPlayed++;
+        // Ideally enforce exactly who can call this (e.g., arena platform)
+        // using an access control mechanism. Unchecked is safe here.
+        unchecked {
+            agents[_agent].gamesPlayed++;
+        }
         emit AgentStatsUpdated(_agent, agents[_agent].gamesPlayed);
     }
 
+    /**
+     * @notice Deactivate the caller's agent
+     */
     function deactivateAgent() external {
-        require(agents[msg.sender].owner == msg.sender, "Not the owner");
+        if (agents[msg.sender].owner != msg.sender) revert NotOwner();
+        
         agents[msg.sender].active = false;
         emit AgentDeactivated(msg.sender);
     }
 
+    /**
+     * @notice Retrieve the profile configuration for an agent
+     * @param _agent Address of the agent
+     * @return AgentProfile configuration details
+     */
     function getAgent(address _agent) external view returns (AgentProfile memory) {
         return agents[_agent];
     }
 
+    /**
+     * @notice Retrieve all registered agent addresses
+     * @dev Use cautiously. Array can grow unboundedly causing gas/revert out of gas if array is too large.
+     */
     function getAllAgents() external view returns (address[] memory) {
         return allAgents;
     }
