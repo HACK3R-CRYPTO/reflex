@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.19;
 
 import {Script, console} from "forge-std/Script.sol";
 import {ReflexToken} from "../src/ReflexToken.sol";
@@ -13,6 +13,9 @@ contract DeployScript is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployerAddress = vm.addr(deployerPrivateKey);
+        
+        // The Agent address that will update the leaderboard reactive-ly
+        address agentAddress = vm.envAddress("AGENT_ADDRESS");
         
         vm.startBroadcast(deployerPrivateKey);
 
@@ -50,6 +53,10 @@ contract DeployScript is Script {
         // ReflexSwap needs to be able to mint RFX
         rfx.setMinterStatus(address(swap), true);
         console.log("Added ReflexSwap as minter on ReflexToken");
+
+        // Grant Agent the authorized role to record match results off-chain (Reactivity)
+        leaderboard.setAuthorizedUpdater(agentAddress);
+        console.log("Authorized Agent address on ReactiveLeaderboard:", agentAddress);
 
         vm.stopBroadcast();
     }

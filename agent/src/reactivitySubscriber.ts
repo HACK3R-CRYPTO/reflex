@@ -6,6 +6,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 const ARENA_PLATFORM_ADDRESS = process.env.ARENA_PLATFORM_ADDRESS;
+const LEADERBOARD_ADDRESS = process.env.REACTIVE_LEADERBOARD_ADDRESS;
 
 // Minimal ABI just for the events and functions we need
 const ARENA_ABI = [
@@ -13,13 +14,17 @@ const ARENA_ABI = [
     "event MatchProposed(uint256 indexed matchId, address indexed challenger, address indexed opponent, uint256 wager, uint8 gameType)",
     "event MatchAccepted(uint256 indexed matchId, address indexed opponent)",
     "event MoveCommitted(uint256 indexed matchId, address indexed player)",
-    "event MatchCompleted(uint256 indexed matchId, address indexed winner, uint256 prize)",
+    "event MatchCompleted(uint256 indexed matchId, address challenger, address opponent, address winner, uint256 prize)",
     
     // Functions
     "function acceptMatch(uint256 _matchId) external",
     "function commitMove(uint256 _matchId, bytes32 _commitHash) external",
     "function revealMove(uint256 _matchId, uint8 _move, string calldata _secret) external",
     "function matches(uint256) external view returns (address challenger, uint8 gameType, uint8 status, address opponent, uint96 wager, address winner, uint64 createdAt)"
+];
+
+const LEADERBOARD_ABI = [
+    "function recordMatchResult(address winner, address loser, address challenger, address opponent, uint256 prize, bool isTie) external"
 ];
 
 // In-memory store of the moves we've committed so we know what to reveal
@@ -31,8 +36,8 @@ const pendingReveals = new Map<number, { move: number, secret: string }>();
  * This replaces standard polling with instant push reactivity.
  */
 export function setupReactivityListener(wallet: ethers.Wallet) {
-    if (!ARENA_PLATFORM_ADDRESS) {
-        console.error("❌ ARENA_PLATFORM_ADDRESS not set. Cannot listen for matches.");
+    if (!ARENA_PLATFORM_ADDRESS || !LEADERBOARD_ADDRESS) {
+        console.error("❌ ARENA_PLATFORM_ADDRESS or REACTIVE_LEADERBOARD_ADDRESS not set. Cannot listen/update results.");
         return;
     }
 
@@ -50,6 +55,7 @@ export function setupReactivityListener(wallet: ethers.Wallet) {
     }
 
     const arenaContract = new ethers.Contract(ARENA_PLATFORM_ADDRESS, ARENA_ABI, wallet.connect(provider));
+    const leaderboardContract = new ethers.Contract(LEADERBOARD_ADDRESS, LEADERBOARD_ABI, wallet.connect(provider));
 
     // ------------------------------------------------------------------------
     // Reactivity Event 1: MatchProposed
@@ -133,16 +139,36 @@ export function setupReactivityListener(wallet: ethers.Wallet) {
 
     // ------------------------------------------------------------------------
     // Reactivity Event 4: MatchCompleted
-    // Action: Log the result out
+    // Action: OFF-CHAIN REACTIVITY -> Record the result in the Leaderboard.
+    // This allows the Leaderboard to be "reactive" to Arena events without
+    // needing on-chain precompile callbacks.
     // ------------------------------------------------------------------------
-    arenaContract.on("MatchCompleted", async (matchId, winner, prize, event) => {
+    arenaContract.on("MatchCompleted", async (matchId, challenger, opponent, winner, prize, event) => {
         const matchIdNum = Number(matchId);
-        if (winner === wallet.address) {
-            console.log(`\n🏆 [REACTIVITY PUSH] NEXUS WON Match ${matchIdNum}! Gained ${ethers.formatEther(prize)} RFX`);
-        } else if (winner === ethers.ZeroAddress) {
-            console.log(`\n🤝 [REACTIVITY PUSH] Match ${matchIdNum} was a TIE.`);
-        } else {
-            console.log(`\n💀 [REACTIVITY PUSH] NEXUS LOST Match ${matchIdNum}. The Nash equilibrium favored the opponent!`);
+        const isTie = (winner === ethers.ZeroAddress);
+        let loser = ethers.ZeroAddress;
+
+        if (!isTie) {
+            loser = (winner === challenger) ? opponent : challenger;
+        }
+
+        console.log(`\n🏁 [REACTIVITY PUSH] Match ${matchIdNum} completed. Recording result to Leaderboard...`);
+        
+        try {
+            // Record the match result in the leaderboard contract
+            // The Agent is authorized to call this.
+            const tx = await leaderboardContract.recordMatchResult(winner, loser, challenger, opponent, prize, isTie);
+            console.log(`📈 Leaderboard updated! TX: ${tx.hash}`);
+            
+            if (winner === wallet.address) {
+                console.log(`🏆 NEXUS WON! Gained ${ethers.formatEther(prize)} RFX`);
+            } else if (isTie) {
+                console.log(`🤝 TIE.`);
+            } else {
+                console.log(`💀 NEXUS LOST.`);
+            }
+        } catch (error: any) {
+            console.error(`❌ Failed to update leaderboard for match ${matchIdNum}:`, error.reason || error.message);
         }
     });
 

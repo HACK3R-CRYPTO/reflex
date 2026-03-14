@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.19;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {SomniaEventHandler} from "@somnia-chain/reactivity-contracts/contracts/SomniaEventHandler.sol";
 
 /**
  * @title ReactiveLeaderboard
- * @notice On-chain leaderboard tracking stats reactive to Platform events
+ * @notice On-chain leaderboard tracking stats updated by the AI Agent
  * @dev Optimized storage packing and mapping usage to save gas
  */
-contract ReactiveLeaderboard is Ownable, SomniaEventHandler {
+contract ReactiveLeaderboard is Ownable {
     
     // --- Custom Errors ---
     error InvalidAddress();
-    error UnauthorizedEmitter();
+    error UnauthorizedUpdater();
 
     // --- Structs ---
     struct PlayerStats {
@@ -33,10 +32,8 @@ contract ReactiveLeaderboard is Ownable, SomniaEventHandler {
     address[] public knownPlayers;
     mapping(address => bool) private _isKnown;
     
-    // Address of the allowed emitter for security (ArenaPlatform)
-    address public allowedEmitter;
-    // Expected signature for MatchCompleted(uint256,address,address,address,uint256)
-    bytes32 private constant MATCH_COMPLETED_TOPIC = keccak256("MatchCompleted(uint256,address,address,address,uint256)");
+    // Address of the authorized updater (the AI Agent)
+    address public authorizedUpdater;
 
     // --- Events ---
     event LeaderboardUpdated(
@@ -48,43 +45,28 @@ contract ReactiveLeaderboard is Ownable, SomniaEventHandler {
     );
     
     event SoloScoreSubmitted(address indexed player, uint64 score);
+    event AuthorizedUpdaterChanged(address indexed oldUpdater, address indexed newUpdater);
 
     constructor() Ownable(msg.sender) {}
     
-    function setAllowedEmitter(address _emitter) external onlyOwner {
-        allowedEmitter = _emitter;
+    function setAuthorizedUpdater(address _updater) external onlyOwner {
+        emit AuthorizedUpdaterChanged(authorizedUpdater, _updater);
+        authorizedUpdater = _updater;
     }
 
     /**
-     * @notice Somnia Reactivity Engine callback handler
+     * @notice Records a match result. Only callable by the authorized AI Agent.
      */
-    function _onEvent(
-        address emitter,
-        bytes32[] calldata eventTopics,
-        bytes calldata data
-    ) internal override {
-        // Enforce that only events from our allowed platform are processed
-        if (allowedEmitter != address(0) && emitter != allowedEmitter) revert UnauthorizedEmitter();
+    function recordMatchResult(
+        address winner, 
+        address loser, 
+        address challenger, 
+        address opponent, 
+        uint256 prize, 
+        bool isTie
+    ) external {
+        if (msg.sender != authorizedUpdater && msg.sender != owner()) revert UnauthorizedUpdater();
         
-        // Topic 0 is always the event signature
-        if (eventTopics[0] == MATCH_COMPLETED_TOPIC) {
-            // In ArenaPlatform: event MatchCompleted(uint256 indexed matchId, address challenger, address opponent, address winner, uint256 prize);
-            // matchId is indexed (topic 1), the rest are in the data payload
-            
-            (address challenger, address opponent, address winner, uint256 prize) = abi.decode(data, (address, address, address, uint256));
-            
-            bool isTie = (winner == address(0));
-            address loser = address(0);
-            
-            if (!isTie) {
-                loser = (winner == challenger) ? opponent : challenger;
-            }
-            
-            _processMatchResult(winner, loser, challenger, opponent, prize, isTie);
-        }
-    }
-
-    function _processMatchResult(address winner, address loser, address challenger, address opponent, uint256 prize, bool isTie) internal {
         if (challenger != address(0)) _addToKnown(challenger);
         if (opponent != address(0)) _addToKnown(opponent);
 
@@ -147,6 +129,17 @@ contract ReactiveLeaderboard is Ownable, SomniaEventHandler {
     /**
      * @notice Use cautiously outside off-chain reads - can be gas intensive
      */
+    function findPlayers(uint256 startIndex, uint256 count) external view returns (address[] memory) {
+        uint256 limit = startIndex + count;
+        if (limit > knownPlayers.length) limit = knownPlayers.length;
+        
+        address[] memory result = new address[](limit - startIndex);
+        for (uint256 i = startIndex; i < limit; i++) {
+            result[i - startIndex] = knownPlayers[i];
+        }
+        return result;
+    }
+
     function getAllKnownPlayers() external view returns (address[] memory) {
         return knownPlayers;
     }

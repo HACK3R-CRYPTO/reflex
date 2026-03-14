@@ -15,16 +15,16 @@ contract ReactiveLeaderboardTest is Test {
         leaderboard = new ReactiveLeaderboard();
     }
     function test_ProcessMatchResult_WinLoss() public {
-        // mock Somnia reactivity precompile calling onEvent
-        bytes32[] memory topics = new bytes32[](2);
-        topics[0] = keccak256("MatchCompleted(uint256,address,address,address,uint256)");
-        topics[1] = bytes32(uint256(1)); // matchId
-        
+        // simulate AI Agent calling recordMatchResult
         // MatchCompleted(matchId, challenger, opponent, winner, prize)
-        bytes memory data = abi.encode(player1, player2, player1, uint256(100));
-        
-        vm.prank(address(0x0100)); // SOMNIA_REACTIVITY_PRECOMPILE_ADDRESS
-        leaderboard.onEvent(address(0), topics, data);
+        address winner = player1;
+        address loser = player2;
+        address challenger = player1;
+        address opponent = player2;
+        uint256 prize = 100;
+
+        leaderboard.setAuthorizedUpdater(owner);
+        leaderboard.recordMatchResult(winner, loser, challenger, opponent, prize, false);
 
         ReactiveLeaderboard.PlayerStats memory p1Stats = leaderboard.getPlayerStats(player1);
         assertEq(p1Stats.wins, 1);
@@ -45,14 +45,14 @@ contract ReactiveLeaderboardTest is Test {
     }
 
     function test_ProcessMatchResult_Tie() public {
-        bytes32[] memory topics = new bytes32[](2);
-        topics[0] = keccak256("MatchCompleted(uint256,address,address,address,uint256)");
-        topics[1] = bytes32(uint256(2)); // matchId
-        
-        bytes memory data = abi.encode(player1, player2, address(0), uint256(0));
-        
-        vm.prank(address(0x0100));
-        leaderboard.onEvent(address(0), topics, data);
+        address winner = address(0);
+        address loser = address(0);
+        address challenger = player1;
+        address opponent = player2;
+        uint256 prize = 0;
+
+        leaderboard.setAuthorizedUpdater(owner);
+        leaderboard.recordMatchResult(winner, loser, challenger, opponent, prize, true);
 
         ReactiveLeaderboard.PlayerStats memory p1Stats = leaderboard.getPlayerStats(player1);
         assertEq(p1Stats.wins, 0);
