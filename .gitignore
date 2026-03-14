@@ -2,6 +2,7 @@
 
 # Local planning docs — not for remote
 PRD.md
+reactivity_docs.txt
 
 # Environment
 .env

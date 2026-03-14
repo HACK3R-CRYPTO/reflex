@@ -1,28 +1,47 @@
 import { ethers } from "ethers";
 import * as dotenv from "dotenv";
+import { setupReactivityListener } from "./reactivitySubscriber";
+import { registerAgentIfNew } from "./agentRegistration";
 
 dotenv.config();
 
+// The NEXUS AI Agent
+// Responsibilities:
+// 1. Maintain a funded wallet on Somnia Testnet
+// 2. Ensure it's registered on the AgentRegistry
+// 3. Listen to Somnia Reactivity for MatchProposed events (auto-accepts open challenges)
+// 4. Listen to Somnia Reactivity for MatchAccepted events (auto-plays its move)
 async function main() {
-  console.log("🚀 Reflex Agent (NEXUS) starting...");
+    console.log("====================================");
+    console.log("🤖 Reflex NEXUS Agent Initialization");
+    console.log("====================================\n");
 
-  const rpcUrl = process.env.SOMNIA_RPC_URL || "https://rpc-testnet.somnia.network";
-  const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const rpcUrl = process.env.SOMNIA_RPC_URL;
+    const privateKey = process.env.AGENT_PRIVATE_KEY;
+    
+    if (!rpcUrl || !privateKey) {
+        console.error("❌ Missing environment variables (SOMNIA_RPC_URL or AGENT_PRIVATE_KEY)");
+        process.exit(1);
+    }
 
-  const privateKey = process.env.AGENT_PRIVATE_KEY;
-  if (!privateKey) {
-    console.warn("⚠️ AGENT_PRIVATE_KEY not found in .env. Running in read-only mode.");
-  } else {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
     const wallet = new ethers.Wallet(privateKey, provider);
-    console.log(`📡 Connected as: ${wallet.address}`);
-  }
+    
+    console.log(`📡 Connected to Somnia Testnet`);
+    console.log(`🛡️  Agent Address: ${wallet.address}`);
+    
+    const balance = await provider.getBalance(wallet.address);
+    console.log(`💰 Native Balance: ${ethers.formatEther(balance)} SOMNI\n`);
 
-  console.log("⏳ Waiting for Somnia Reactivity events...");
-  
-  // TODO: Initialize Reactivity SDK and subscribe to MatchProposed events
+    // 1. Register Agent Profile (Idempotent)
+    await registerAgentIfNew(wallet);
+
+    // 2. Subscribe to Reactivity Events
+    console.log("🎧 Subscribing to Somnia Reactivity Engine...");
+    setupReactivityListener(wallet);
 }
 
 main().catch((error) => {
-  console.error("💥 Fatal Error:", error);
-  process.exit(1);
+    console.error("Fatal Error in NEXUS Agent:", error);
+    process.exit(1);
 });

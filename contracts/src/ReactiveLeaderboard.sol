@@ -2,16 +2,18 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {SomniaEventHandler} from "@somnia-chain/reactivity-contracts/contracts/SomniaEventHandler.sol";
 
 /**
  * @title ReactiveLeaderboard
  * @notice On-chain leaderboard tracking stats reactive to Platform events
  * @dev Optimized storage packing and mapping usage to save gas
  */
-contract ReactiveLeaderboard is Ownable {
+contract ReactiveLeaderboard is Ownable, SomniaEventHandler {
     
     // --- Custom Errors ---
     error InvalidAddress();
+    error UnauthorizedEmitter();
 
     // --- Structs ---
     struct PlayerStats {
@@ -30,6 +32,11 @@ contract ReactiveLeaderboard is Ownable {
     // Track known players for off-chain enumeration (use cautiously due to array growth)
     address[] public knownPlayers;
     mapping(address => bool) private _isKnown;
+    
+    // Address of the allowed emitter for security (ArenaPlatform)
+    address public allowedEmitter;
+    // Expected signature for MatchCompleted(uint256,address,address,address,uint256)
+    bytes32 private constant MATCH_COMPLETED_TOPIC = keccak256("MatchCompleted(uint256,address,address,address,uint256)");
 
     // --- Events ---
     event LeaderboardUpdated(
@@ -43,19 +50,48 @@ contract ReactiveLeaderboard is Ownable {
     event SoloScoreSubmitted(address indexed player, uint64 score);
 
     constructor() Ownable(msg.sender) {}
+    
+    function setAllowedEmitter(address _emitter) external onlyOwner {
+        allowedEmitter = _emitter;
+    }
 
     /**
-     * @notice Expected to be called by Somnia Reactivity Engine or ArenaPlatform
-     * when a MatchCompleted event is detected.
+     * @notice Somnia Reactivity Engine callback handler
      */
-    function processMatchResult(address winner, address loser, uint256 prize, bool isTie) external {
-        if (winner != address(0)) _addToKnown(winner);
-        if (loser != address(0)) _addToKnown(loser);
+    function _onEvent(
+        address emitter,
+        bytes32[] calldata eventTopics,
+        bytes calldata data
+    ) internal override {
+        // Enforce that only events from our allowed platform are processed
+        if (allowedEmitter != address(0) && emitter != allowedEmitter) revert UnauthorizedEmitter();
+        
+        // Topic 0 is always the event signature
+        if (eventTopics[0] == MATCH_COMPLETED_TOPIC) {
+            // In ArenaPlatform: event MatchCompleted(uint256 indexed matchId, address challenger, address opponent, address winner, uint256 prize);
+            // matchId is indexed (topic 1), the rest are in the data payload
+            
+            (address challenger, address opponent, address winner, uint256 prize) = abi.decode(data, (address, address, address, uint256));
+            
+            bool isTie = (winner == address(0));
+            address loser = address(0);
+            
+            if (!isTie) {
+                loser = (winner == challenger) ? opponent : challenger;
+            }
+            
+            _processMatchResult(winner, loser, challenger, opponent, prize, isTie);
+        }
+    }
+
+    function _processMatchResult(address winner, address loser, address challenger, address opponent, uint256 prize, bool isTie) internal {
+        if (challenger != address(0)) _addToKnown(challenger);
+        if (opponent != address(0)) _addToKnown(opponent);
 
         if (isTie) {
             unchecked {
-                if (winner != address(0)) stats[winner].ties++;
-                if (loser != address(0)) stats[loser].ties++;
+                if (challenger != address(0)) stats[challenger].ties++;
+                if (opponent != address(0)) stats[opponent].ties++;
             }
         } else {
             // Unchecked blocks save gas for counters where overflow is effectively impossible
@@ -77,7 +113,7 @@ contract ReactiveLeaderboard is Ownable {
     /**
      * @notice Solo games (e.g. Rhythm) submit high scores directly to this contract.
      */
-    function submitSoloScore(address player, uint64 scoreAdded) external {
+    function submitSoloScore(address player, uint64 scoreAdded) external onlyOwner {
         if (player == address(0)) revert InvalidAddress();
 
         _addToKnown(player);

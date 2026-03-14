@@ -94,7 +94,7 @@ contract ArenaPlatform is Ownable, ReentrancyGuard {
     event MatchAccepted(uint256 indexed matchId, address indexed opponent);
     event MoveCommitted(uint256 indexed matchId, address indexed player);
     event MoveRevealed(uint256 indexed matchId, address indexed player, uint8 move);
-    event MatchCompleted(uint256 indexed matchId, address indexed winner, uint256 prize);
+    event MatchCompleted(uint256 indexed matchId, address challenger, address opponent, address winner, uint256 prize);
     event MatchCancelled(uint256 indexed matchId);
 
     constructor(address _treasury, address _reflexToken) Ownable(msg.sender) {
@@ -300,7 +300,7 @@ contract ArenaPlatform is Ownable, ReentrancyGuard {
             // Tie: return wagers
             REFLEX_TOKEN.safeTransfer(challenger, matchWager);
             REFLEX_TOKEN.safeTransfer(opponent, matchWager);
-            emit MatchCompleted(_matchId, address(0), 0);
+            emit MatchCompleted(_matchId, challenger, opponent, address(0), 0);
         } else {
             uint256 platformFee = (totalPool * PLATFORM_FEE_BPS) / 10000;
             uint256 prize = totalPool - platformFee;
@@ -308,7 +308,7 @@ contract ArenaPlatform is Ownable, ReentrancyGuard {
             REFLEX_TOKEN.safeTransfer(PLATFORM_TREASURY, platformFee / 2); // Burn remaining half intrinsically
             REFLEX_TOKEN.safeTransfer(winner, prize);
             
-            emit MatchCompleted(_matchId, winner, prize);
+            emit MatchCompleted(_matchId, challenger, opponent, winner, prize);
         }
     }
 
