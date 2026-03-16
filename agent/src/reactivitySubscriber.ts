@@ -139,37 +139,22 @@ export function setupReactivityListener(wallet: ethers.Wallet) {
 
     // ------------------------------------------------------------------------
     // Reactivity Event 4: MatchCompleted
-    // Action: OFF-CHAIN REACTIVITY -> Record the result in the Leaderboard.
-    // This allows the Leaderboard to be "reactive" to Arena events without
-    // needing on-chain precompile callbacks.
+    // The on-chain ReactiveLeaderboard subscription handles leaderboard updates
+    // automatically via Somnia validators. The agent just logs the result here.
     // ------------------------------------------------------------------------
     arenaContract.on("MatchCompleted", async (matchId, challenger, opponent, winner, prize, event) => {
         const matchIdNum = Number(matchId);
         const isTie = (winner === ethers.ZeroAddress);
-        let loser = ethers.ZeroAddress;
 
-        if (!isTie) {
-            loser = (winner === challenger) ? opponent : challenger;
+        if (isTie) {
+            console.log(`\n🤝 [REACTIVITY PUSH] Match ${matchIdNum} ended in a TIE.`);
+        } else if (winner === wallet.address) {
+            console.log(`\n🏆 [REACTIVITY PUSH] NEXUS WON Match ${matchIdNum}! Gained ${ethers.formatEther(prize)} RFX`);
+        } else {
+            console.log(`\n💀 [REACTIVITY PUSH] NEXUS LOST Match ${matchIdNum}.`);
         }
 
-        console.log(`\n🏁 [REACTIVITY PUSH] Match ${matchIdNum} completed. Recording result to Leaderboard...`);
-        
-        try {
-            // Record the match result in the leaderboard contract
-            // The Agent is authorized to call this.
-            const tx = await leaderboardContract.recordMatchResult(winner, loser, challenger, opponent, prize, isTie);
-            console.log(`📈 Leaderboard updated! TX: ${tx.hash}`);
-            
-            if (winner === wallet.address) {
-                console.log(`🏆 NEXUS WON! Gained ${ethers.formatEther(prize)} RFX`);
-            } else if (isTie) {
-                console.log(`🤝 TIE.`);
-            } else {
-                console.log(`💀 NEXUS LOST.`);
-            }
-        } catch (error: any) {
-            console.error(`❌ Failed to update leaderboard for match ${matchIdNum}:`, error.reason || error.message);
-        }
+        console.log(`   ↪ Leaderboard update handled on-chain by Somnia validators.`);
     });
 
     // Handle process termination cleanly
