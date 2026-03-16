@@ -1,122 +1,73 @@
-# <img src="logo.svg" alt="OpenZeppelin" height="40px">
+# Reflex — Contracts
 
-[![Github Release](https://img.shields.io/github/v/tag/OpenZeppelin/openzeppelin-contracts.svg?filter=v*&sort=semver&label=github)](https://github.com/OpenZeppelin/openzeppelin-contracts/releases/latest)
-[![NPM Package](https://img.shields.io/npm/v/@openzeppelin/contracts.svg)](https://www.npmjs.org/package/@openzeppelin/contracts)
-[![Coverage Status](https://codecov.io/gh/OpenZeppelin/openzeppelin-contracts/graph/badge.svg)](https://codecov.io/gh/OpenZeppelin/openzeppelin-contracts)
-[![GitPOAPs](https://public-api.gitpoap.io/v1/repo/OpenZeppelin/openzeppelin-contracts/badge)](https://www.gitpoap.io/gh/OpenZeppelin/openzeppelin-contracts)
-[![Docs](https://img.shields.io/badge/docs-%F0%9F%93%84-yellow)](https://docs.openzeppelin.com/contracts)
-[![Forum](https://img.shields.io/badge/forum-%F0%9F%92%AC-yellow)](https://forum.openzeppelin.com/)
+Solidity contracts for the Reflex gaming platform. Built with Foundry, deployed on Somnia Testnet.
 
-**A library for secure smart contract development.** Build on a solid foundation of community-vetted code.
-
- * Implementations of standards like [ERC20](https://docs.openzeppelin.com/contracts/erc20) and [ERC721](https://docs.openzeppelin.com/contracts/erc721).
- * Flexible [role-based permissioning](https://docs.openzeppelin.com/contracts/access-control) scheme.
- * Reusable [Solidity components](https://docs.openzeppelin.com/contracts/utilities) to build custom contracts and complex decentralized systems.
-
-:mage: **Not sure how to get started?** Check out [Contracts Wizard](https://wizard.openzeppelin.com/) — an interactive smart contract generator.
-
-> [!IMPORTANT]
-> OpenZeppelin Contracts uses semantic versioning to communicate backwards compatibility of its API and storage layout. For upgradeable contracts, the storage layout of different major versions should be assumed incompatible, for example, it is unsafe to upgrade from 4.9.3 to 5.0.0. Learn more at [Backwards Compatibility](https://docs.openzeppelin.com/contracts/backwards-compatibility).
-
-## Overview
-
-### Release tags
-
-We use NPM tags to clearly distinguish between audited and non-audited versions of our package:
-
-| Tag        | Purpose                  | Description                                                                                                                                                                   |
-| :--------- | :----------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **latest** | ✅ Audited releases      | Stable, audited versions of the package. This is the **default** version installed when users run `npm install @openzeppelin/contracts`.                                      |
-| **dev**    | 🧪 Final but not audited | Versions that are finalized and feature-complete but have **not yet been audited**. This version is fully tested, can be used in production and is covered by the bug bounty. |
-| **next**   | 🚧 Release candidates    | Pre-release versions that are **not final**. Used for testing and validation before the version becomes a final `dev` or `latest` release.                                    |
-
-### Installation
-
-#### Hardhat (npm)
+## Architecture
 
 ```
-$ npm install @openzeppelin/contracts
-```
-→ Installs the latest audited release (`latest`).
-
-```
-$ npm install @openzeppelin/contracts@dev
-```
-→ Installs the latest unaudited release (`dev`).
-
-#### Foundry (git)
-
-> [!WARNING]
-> When installing via git, it is a common error to use the `master` branch. This is a development branch that should be avoided in favor of tagged releases. The release process involves security measures that the `master` branch does not guarantee.
-
-> [!WARNING]
-> Foundry installs the latest version initially, but subsequent `forge update` commands will use the `master` branch.
-
-```
-$ forge install OpenZeppelin/openzeppelin-contracts
+ReflexToken (RFX) ─────► ReflexSwap (buy RFX)
+                          ReflexPass (mint with RFX)
+                               │
+                               ▼
+                         ArenaPlatform ──► MatchCompleted event
+                               │                  │
+                               ▼                  ▼ (Somnia Reactivity)
+                         AgentRegistry    ReactiveLeaderboard
+                                          (SomniaEventHandler)
 ```
 
-Add `@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/` in `remappings.txt`.
+## Contracts
 
-### Usage
+| Contract | Description | Address |
+|---|---|---|
+| `ReflexToken` | ERC-20 in-game currency (RFX). 100M supply, minted by ReflexSwap | `0x2ef34c1CbBA918a7553e1c37f694a2De5332fF91` |
+| `ReflexPass` | ERC-721 access pass, costs 10 RFX to mint | `0x949Bc496528aBBd3a48Ab11B3a092C2a54b16360` |
+| `ReflexSwap` | Swap STT → RFX at fixed rate (1 STT = 100 RFX) | `0x42a53C3Ce6cBf795ba5252b9817FE58f4c984365` |
+| `ArenaPlatform` | PvP commit-reveal arena with wager support | `0xABa92335453d8c97c5A550827dffa0E95977384F` |
+| `AgentRegistry` | EIP-8004 registry for AI agent identities | `0x1620024163b8C9CE917b82932093A6De22Ba89d8` |
+| `ReactiveLeaderboard` | On-chain leaderboard updated via Somnia Reactivity | `0x8BA994E22f9Ec33d0C0dD069939B8f52658980E0` |
 
-Once installed, you can use the contracts in the library by importing them:
+## On-Chain Reactivity (`ReactiveLeaderboard`)
+
+`ReactiveLeaderboard` inherits [`SomniaEventHandler`](https://www.npmjs.com/package/@somnia-chain/reactivity-contracts).
+
+When `ArenaPlatform` emits `MatchCompleted`, Somnia validators at `0x0100` automatically invoke `onEvent()`, which decodes the event data and updates player stats atomically — no off-chain agent needed.
 
 ```solidity
-pragma solidity ^0.8.20;
-
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-
-contract MyCollectible is ERC721 {
-    constructor() ERC721("MyCollectible", "MCO") {
-    }
+// Only the Somnia Reactivity Precompile (0x0100) can call this
+function _onEvent(address emitter, bytes32[] calldata topics, bytes calldata data)
+    internal override
+{
+    // decodes MatchCompleted payload → updates wins/losses/score
 }
 ```
 
-_If you're new to smart contract development, head to [Developing Smart Contracts](https://docs.openzeppelin.com/learn/developing-smart-contracts) to learn about creating a new project and compiling your contracts._
+Reactivity subscription TX: `0x3e8c77e78ea4067cb615ee29fd0c13c13aa2872cb8982ee46e6032379b8aaa34`
 
-To keep your system secure, you should **always** use the installed code as-is, and neither copy-paste it from online sources nor modify it yourself. The library is designed so that only the contracts and functions you use are deployed, so you don't need to worry about it needlessly increasing gas costs.
+## Setup
 
-## Learn More
+```bash
+# Install dependencies
+forge install
 
-The guides in the [documentation site](https://docs.openzeppelin.com/contracts) will teach about different concepts, and how to use the related contracts that OpenZeppelin Contracts provides:
+# Run tests (26 tests)
+forge test
 
-* [Access Control](https://docs.openzeppelin.com/contracts/access-control): decide who can perform each of the actions on your system.
-* [Tokens](https://docs.openzeppelin.com/contracts/tokens): create tradeable assets or collectibles for popular ERC standards like ERC-20, ERC-721, ERC-1155, and ERC-6909.
-* [Utilities](https://docs.openzeppelin.com/contracts/utilities): generic useful tools including non-overflowing math, signature verification, and trustless paying systems.
+# Deploy to Somnia Testnet (set .env first)
+cp .env.example .env
+source .env && forge script script/Deploy.s.sol --rpc-url $SOMNIA_RPC_URL \
+  --broadcast --legacy --slow --skip-simulation --gas-price 6000000000
+```
 
-The [full API](https://docs.openzeppelin.com/contracts/api/token/ERC20) is also thoroughly documented, and serves as a great reference when developing your smart contract application. You can also ask for help or follow Contracts' development in the [community forum](https://forum.openzeppelin.com).
+## Environment Variables
 
-Finally, you may want to take a look at the [guides on our blog](https://blog.openzeppelin.com/), which cover several common use cases and good practices. The following articles provide great background reading, though please note that some of the referenced tools have changed, as the tooling in the ecosystem continues to rapidly evolve.
+```env
+SOMNIA_RPC_URL=https://dream-rpc.somnia.network
+DEPLOYER_PRIVATE_KEY=0x...
+```
 
-* [The Hitchhiker’s Guide to Smart Contracts in Ethereum](https://blog.openzeppelin.com/the-hitchhikers-guide-to-smart-contracts-in-ethereum-848f08001f05) will help you get an overview of the various tools available for smart contract development, and help you set up your environment.
-* [A Gentle Introduction to Ethereum Programming, Part 1](https://blog.openzeppelin.com/a-gentle-introduction-to-ethereum-programming-part-1-783cc7796094) provides very useful information on an introductory level, including many basic concepts from the Ethereum platform.
-* For a more in-depth dive, you may read the guide [Designing the Architecture for Your Ethereum Application](https://blog.openzeppelin.com/designing-the-architecture-for-your-ethereum-application-9cec086f8317), which discusses how to better structure your application and its relationship to the real world.
+## Dependencies
 
-## Security
-
-This project is maintained by [OpenZeppelin](https://openzeppelin.com) with the goal of providing a secure and reliable library of smart contract components for the ecosystem. We address security through risk management in various areas such as engineering and open source best practices, scoping and API design, multi-layered review processes, and incident response preparedness.
-
-The [OpenZeppelin Contracts Security Center](https://contracts.openzeppelin.com/security) contains more details about the secure development process.
-
-The security policy is detailed in [`SECURITY.md`](./SECURITY.md) as well, and specifies how you can report security vulnerabilities, which versions will receive security patches, and how to stay informed about them. We run a [bug bounty program on Immunefi](https://immunefi.com/bounty/openzeppelin) to reward the responsible disclosure of vulnerabilities.
-
-The engineering guidelines we follow to promote project quality can be found in [`GUIDELINES.md`](./GUIDELINES.md).
-
-Past audits can be found in [`audits/`](./audits).
-
-Smart contracts are a nascent technology and carry a high level of technical risk and uncertainty. Although OpenZeppelin is well known for its security audits, using OpenZeppelin Contracts is not a substitute for a security audit.
-
-OpenZeppelin Contracts is made available under the MIT License, which disclaims all warranties in relation to the project and which limits the liability of those that contribute and maintain the project, including OpenZeppelin. As set out further in the Terms, you acknowledge that you are solely responsible for any use of OpenZeppelin Contracts and you assume all risks associated with any such use.
-
-## Contribute
-
-OpenZeppelin Contracts exists thanks to its contributors. There are many ways you can participate and help build high quality software. Check out the [contribution guide](CONTRIBUTING.md)!
-
-## License
-
-OpenZeppelin Contracts is released under the [MIT License](LICENSE).
-
-## Legal
-
-Your use of this Project is governed by the terms found at www.openzeppelin.com/tos (the "Terms").
+- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) v5 — `Ownable`, `ERC20`, `ERC721`
+- [@somnia-chain/reactivity-contracts](https://www.npmjs.com/package/@somnia-chain/reactivity-contracts) — `SomniaEventHandler`
+- [forge-std](https://github.com/foundry-rs/forge-std) — Foundry testing utilities
