@@ -441,6 +441,87 @@ footer {
   margin-bottom: 1.5rem;
 }
 
+/* ── Arena layout ─────────────────────────── */
+.arena-page {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 2rem;
+  align-items: start;
+}
+.arena-main { min-width: 0; }
+.arena-sidebar { position: sticky; top: 80px; }
+
+/* ── NEXUS Panel ──────────────────────────── */
+.nexus-panel {
+  background: rgba(112, 0, 255, 0.06);
+  border: 1px solid rgba(112, 0, 255, 0.3);
+  border-radius: 20px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.nexus-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.nexus-icon { font-size: 2rem; }
+.nexus-name { font-weight: 700; font-size: 1.05rem; }
+.nexus-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.35);
+  margin-top: 2px;
+}
+.nexus-status--online { color: var(--green); }
+.nexus-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+.nexus-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.nexus-stat {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.nexus-stat-val   { font-size: 1.4rem; font-weight: 800; color: var(--accent); }
+.nexus-stat-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.35); }
+
+.nexus-section-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.3);
+  margin-bottom: 0.4rem;
+}
+.nexus-strategy-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.3rem; }
+.nexus-strategy-desc { font-size: 0.78rem; color: rgba(255,255,255,0.45); line-height: 1.4; }
+
+.nexus-games { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.nexus-addr-val {
+  font-family: monospace;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.3);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
 /* ── Mobile ──────────────────────────────── */
 @media (max-width: 640px) {
   .nav { padding: 0.75rem 1.25rem; }
@@ -451,4 +532,9 @@ footer {
   .page { padding: 1.5rem 1.25rem; }
   .lb-table { font-size: 0.8rem; }
   .lb-table th, .lb-row td { padding: 0.7rem 0.6rem; }
+  .arena-page { grid-template-columns: 1fr; }
+  .arena-sidebar { position: static; }
+  .nexus-panel { display: none; }
+  .match-detail-grid { grid-template-columns: 1fr; }
+  .vs-divider { display: none; }
 }
