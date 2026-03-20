@@ -1,0 +1,21 @@
+{
+  "name": "reflex-agent",
+  "version": "1.0.0",
+  "description": "NEXUS bot + score validator for Reflex platform",
+  "type": "module",
+  "scripts": {
+    "nexus": "tsx nexus.ts",
+    "validator": "tsx scoreValidator.ts",
+    "dev": "tsx watch nexus.ts"
+  },
+  "dependencies": {
+    "@somnia-chain/reactivity": "latest",
+    "viem": "^2.0.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0"
+  }
+}
