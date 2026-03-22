@@ -109,7 +109,7 @@ async function simulatePlay(gameType: GameType, move: number, wagerRFX: string) 
             abi: ArenaPlatformABI,
             functionName: 'getMatch',
             args: [matchId],
-        }) as any[];
+        }) as unknown as any[];
 
         const isResolved = matchData[6]; // resolved boolean
         if (isResolved) {
@@ -144,10 +144,51 @@ async function simulatePlay(gameType: GameType, move: number, wagerRFX: string) 
   }
 }
 
-// Default to a Rock-Paper-Scissors game (Rock=0) with 1 RFX wager
-const args = process.argv.slice(2);
-const gType = args[0] ? parseInt(args[0]) : GameType.RockPaperScissors;
-const move = args[1] ? parseInt(args[1]) : 0;
-const wager = args[2] || '1';
+async function watchMatches() {
+  console.log('\n📡 NEXUS CORE MONITOR ACTIVE');
+  console.log(`   Watching Arena: ${CONTRACTS.arenaPlatform}`);
+  console.log(`   Establishing on-chain reactivity loop...`);
 
-simulatePlay(gType, move, wager);
+  const unwatch = publicClient.watchContractEvent({
+    address: CONTRACTS.arenaPlatform,
+    abi: ArenaPlatformABI,
+    eventName: 'MatchCompleted',
+    onLogs: (logs) => {
+      for (const log of logs) {
+        const { matchId, winner, aiMove, payout } = (log as any).args;
+        console.log(`\n🏆 MATCH RESOLVED LIVE (#${matchId})`);
+        console.log(`   AI Result move: ${aiMove}`);
+        console.log(`   Winner: ${winner}`);
+        console.log(`   Payout: ${formatEther(payout)} RFX`);
+        console.log('───────────────────────────────────────');
+      }
+    },
+  });
+
+  console.log('   Listening for reactive events... (Press Ctrl+C to stop)');
+
+  // Keep alive
+  return new Promise(() => {});
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  
+  // If no args, run in MONITOR mode (helpful for frontend testing)
+  if (args.length === 0) {
+    await watchMatches();
+    return;
+  }
+
+  // If args provided, run CHALLENGE mode (CLI simulation)
+  const gType = parseInt(args[0]) || 0;
+  const move = parseInt(args[1]) || 0;
+  const wager = args[2] || '1';
+
+  await simulatePlay(gType, move, wager);
+}
+
+main().catch(err => {
+    console.error('❌ CRITICAL ERROR:', err);
+    process.exit(1);
+});

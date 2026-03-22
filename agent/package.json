@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "nexus": "tsx nexus.ts",
+    "monitor": "tsx nexus.ts",
+    "challenge": "tsx nexus.ts 0 0 1",
     "validator": "tsx scoreValidator.ts",
     "dev": "tsx watch nexus.ts"
   },
